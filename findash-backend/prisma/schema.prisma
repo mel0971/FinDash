@@ -1,0 +1,178 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =====================
+// USERS & AUTHENTICATION
+// =====================
+model User {
+  id                    String   @id @default(cuid())
+  email                 String   @unique
+  username              String   @unique
+  passwordHash          String
+  name                  String?
+  profilePicture        String?
+  
+  // 2FA
+  twoFactorEnabled      Boolean  @default(false)
+  twoFactorSecret       String?
+  twoFactorBackupCodes  String[]
+  
+  // Verification
+  isEmailVerified       Boolean  @default(false)
+  phoneNumber           String?
+  isPhoneVerified       Boolean  @default(false)
+  
+  // Metadata
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  deletedAt             DateTime?
+  
+  // Relations
+  portfolios            Portfolio[]
+  transactions          Transaction[]
+  sessions              Session[]
+  auditLogs             AuditLog[]
+  
+  @@map("users")
+}
+
+model Session {
+  id                String   @id @default(cuid())
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  token             String   @unique
+  refreshToken      String?  @unique
+  expiresAt         DateTime
+  
+  lastActivity      DateTime @default(now())
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  @@map("sessions")
+  @@index([userId])
+}
+
+// ====================
+// PORTFOLIO MANAGEMENT
+// ====================
+model Portfolio {
+  id                String   @id @default(cuid())
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  name              String
+  description       String?
+  currency          String   @default("USD")
+  isPrivate         Boolean  @default(false)
+  
+  totalValue        Float    @default(0)
+  totalCost         Float    @default(0)
+  pnl               Float    @default(0)
+  pnlPercent        Float    @default(0)
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  // Relations
+  holdings          Holding[]
+  transactions      Transaction[]
+  
+  @@map("portfolios")
+  @@index([userId])
+}
+
+model Holding {
+  id                String   @id @default(cuid())
+  portfolioId       String
+  portfolio         Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+  
+  symbol            String
+  assetType         String   @default("STOCK") // "STOCK", "CRYPTO", "ETF", "BOND"
+  quantity          Float
+  averagePrice      Float
+  currentPrice      Float?
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  // Relations
+  transactions      Transaction[]
+  
+  @@unique([portfolioId, symbol])
+  @@map("holdings")
+  @@index([portfolioId])
+}
+
+model Transaction {
+  id                String   @id @default(cuid())
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  portfolioId       String
+  portfolio         Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+  
+  holdingId         String?
+  holding           Holding? @relation(fields: [holdingId], references: [id], onDelete: SetNull)
+  
+  symbol            String
+  type              String   // "BUY", "SELL", "DIVIDEND", "FEE"
+  quantity          Float
+  price             Float
+  total             Float
+  
+  fees              Float    @default(0)
+  notes             String?
+  transactionDate   DateTime
+  
+  createdAt         DateTime @default(now())
+  
+  @@map("transactions")
+  @@index([portfolioId])
+  @@index([userId])
+}
+
+// ==================
+// MARKET DATA CACHE
+// ==================
+model PriceCache {
+  id                String   @id @default(cuid())
+  symbol            String   @unique
+  assetType         String   // "STOCK", "CRYPTO", "ETF"
+  price             Float
+  change            Float?
+  changePercent     Float?
+  source            String   // "FINNHUB", "BINANCE", "ALPHA_VANTAGE"
+  lastUpdated       DateTime @default(now())
+  expiresAt         DateTime
+  
+  @@map("price_cache")
+}
+
+// ==================
+// AUDIT & LOGGING
+// ==================
+model AuditLog {
+  id                String   @id @default(cuid())
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  action            String   // "LOGIN", "CREATE_PORTFOLIO", "BUY_ASSET"
+  resource          String?  // Type de ressource modifiée
+  resourceId        String?  // ID de la ressource
+  changes           Json?    // Avant/après
+  
+  ipAddress         String?
+  userAgent         String?
+  
+  createdAt         DateTime @default(now())
+  
+  @@map("audit_logs")
+  @@index([userId])
+}
