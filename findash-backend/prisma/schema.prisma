@@ -105,10 +105,11 @@ model Holding {
   // Relations
   transactions      Transaction[]
   
-  @@unique([portfolioId, symbol])
+  // @@unique([portfolioId, symbol])  ← COMMENTEZ CETTE LIGNE
   @@map("holdings")
   @@index([portfolioId])
 }
+
 
 model Transaction {
   id                String   @id @default(cuid())
